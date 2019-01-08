@@ -31,7 +31,13 @@ contract HashRegistrar is Registrar {
 
     uint32 constant totalAuctionLength = 5 days;
     uint32 constant revealPeriod = 48 hours;
-    uint32 public constant launchLength = 8 weeks;
+    uint32 public constant launchLength = 4 weeks;
+
+    event Paused(address account);
+    event Unpaused(address account);
+    bool private _paused = false;
+
+    mapping (bytes32 => bool) _whitelistHashedName;
 
     uint constant minPrice = 0.01 ether;
     uint public registryStarted;
@@ -57,6 +63,23 @@ contract HashRegistrar is Registrar {
         require(now >= registryStarted && now <= registryStarted + (365 * 4) * 1 days && ens.owner(rootNode) == address(this));
         _;
     }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is not paused.
+     */
+    modifier whenNotPaused() {
+        require(!_paused);
+        _;
+    }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is paused.
+     */
+    modifier whenPaused() {
+        require(_paused);
+        _;
+    }
+
 
     /**
      * @dev Constructs a new Registrar, with the provided address as the owner of the root node.
@@ -255,7 +278,7 @@ contract HashRegistrar is Registrar {
     }
 
     /**
-     * @dev Submit a name 6 characters long or less. If it has been registered,
+     * @dev Submit a name 5 characters long or less. If it has been registered,
      *      the submitter will earn 50% of the deed value. 
      * 
      * We are purposefully handicapping the simplified registrar as a way 
@@ -267,8 +290,10 @@ contract HashRegistrar is Registrar {
         external
         inState(keccak256(abi.encode(unhashedName)), Mode.Owned)
     {
-        require(strlen(unhashedName) <= 6);
+        require(strlen(unhashedName) <= 5);
         bytes32 hash = keccak256(abi.encode(unhashedName));
+        
+        require(!isWhiteListedHashedName(hash));
 
         Entry storage h = _entries[hash];
 
@@ -422,7 +447,7 @@ contract HashRegistrar is Registrar {
         }
     }
 
-    function _startAuction(bytes32 _hash) internal registryOpen() {
+    function _startAuction(bytes32 _hash) internal whenNotPaused registryOpen() {
         Mode mode = state(_hash);
         if (mode == Mode.Auction) return;
         require(mode == Mode.Open);
@@ -502,6 +527,38 @@ contract HashRegistrar is Registrar {
             return a;
         else
             return b;
+    }
+
+    /**
+     * @dev update a hashedname to whitelist
+     */
+    function updateWhitelistHashedName (bytes32 _hash, bytes32 hashedName, bool enable) onlyOwner(_hash) public {
+        require(_whitelistHashedName[hashedName] != enable);
+        _whitelistHashedName[hashedName] = enable;
+    }
+
+    /**
+     * @dev check if an hashedName in whitelist
+     * @return bool
+     */
+    function isWhiteListedHashedName(bytes32 hashedName) public view returns (bool) {
+        return _whitelistHashedName[hashedName];
+    }
+
+    /**
+     * @dev called by the owner to pause, triggers stopped state
+     */
+    function pause(bytes32 _hash) public onlyOwner(_hash) whenNotPaused {
+        _paused = true;
+        emit Paused(msg.sender);
+    }
+
+    /**
+     * @dev called by the owner to unpause, returns to normal state
+     */
+    function unpause(bytes32 _hash) public onlyOwner(_hash) whenPaused {
+        _paused = false;
+        emit Unpaused(msg.sender);
     }
 
     /**

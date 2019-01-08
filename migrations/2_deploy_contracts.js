@@ -6,8 +6,9 @@ const FIFSRegistrar = artifacts.require('./FIFSRegistrar.sol');
 // not existed, it's valid to put it here.
 // TODO: align the contract name with the source code file name.
 const Registrar = artifacts.require('./HashRegistrar.sol');
-const web3 = new (require('web3'))();
+const web3 = new(require('web3'))();
 const namehash = require('eth-ens-namehash');
+const TLD = process.env.TLD;
 
 /**
  * Calculate root node hashes given the top level domain(tld)
@@ -36,7 +37,7 @@ function deployFIFSRegistrar(deployer, tld) {
       // Deploy the FIFSRegistrar and bind it with ENS
       return deployer.deploy(FIFSRegistrar, ENS.address, rootNode.namehash);
     })
-    .then(function() {
+    .then(function () {
       // Transfer the owner of the `rootNode` to the FIFSRegistrar
       ENS.at(ENS.address).setSubnodeOwner('0x0', rootNode.sha3, FIFSRegistrar.address);
     });
@@ -50,28 +51,31 @@ function deployFIFSRegistrar(deployer, tld) {
  */
 function deployAuctionRegistrar(deployer, tld) {
   var rootNode = getRootNodeFromTLD(tld);
-
+  var ENSinstance;
   // Deploy the ENS first
   deployer.deploy(ENS)
-    .then(() => {
+    .then((instance) => {
+      ENSinstance = instance
       // Deploy the HashRegistrar and bind it with ENS
       // The last argument `0` specifies the auction start date to `now`
       return deployer.deploy(Registrar, ENS.address, rootNode.namehash, 0);
     })
-    .then(function() {
+    .then(function () {
       // Transfer the owner of the `rootNode` to the HashRegistrar
-      ENS.at(ENS.address).setSubnodeOwner('0x0', rootNode.sha3, Registrar.address);
+      //ENS.at(ENS.address).setSubnodeOwner('0x0', rootNode.sha3, Registrar.address);
+      ENSinstance.setSubnodeOwner('0x0', rootNode.sha3, Registrar.address);
     });
 }
 
-module.exports = function(deployer, network) {
-  var tld = 'eth';
 
+module.exports = function (deployer, network) {
+  var tld = TLD;
+  console.log('network: ', network);
   if (network === 'dev.fifs') {
     deployFIFSRegistrar(deployer, tld);
-  }
-  else if (network === 'dev.auction') {
+  } else if (network === 'dev.auction') {
+    deployAuctionRegistrar(deployer, tld);
+  } else if (network === 'dev.ropsten-fork') {
     deployAuctionRegistrar(deployer, tld);
   }
-
 };
